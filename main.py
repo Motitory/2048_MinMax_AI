@@ -6,6 +6,7 @@ import _2048
 from _2048.game import Game2048
 from _2048.manager import GameManager
 
+# イベントの定義
 # define events
 EVENTS = [
   pygame.event.Event(pygame.KEYDOWN, {'key': pygame.K_UP}),   # UP
@@ -35,18 +36,22 @@ def move(grid, action):
   moved, sum = 0, 0
   for row, column in CELLS[action]:
     for dr, dc in GET_DELTAS[action](row, column):
+			# 現在のタイルが空白でも、候補に価値がある場合：
       # If the current tile is blank, but the candidate has value:
       if not grid[row][column] and grid[dr][dc]:
+				# 候補を現在のタイルに移動させる。
         # Move the candidate to the current tile.
         grid[row][column], grid[dr][dc] = grid[dr][dc], 0
         moved += 1
       if grid[dr][dc]:
+				# 候補が現在のタイルと合体できるかどうか：
         # If the candidate can merge with the current tile:
         if grid[row][column] == grid[dr][dc]:
           grid[row][column] *= 2
           grid[dr][dc] = 0
           sum += grid[row][column]
           moved += 1
+				# タイルを打つときは、挑戦をやめる。
         # When hitting a tile we stop trying.
         break
   return grid, moved, sum
@@ -56,10 +61,14 @@ def evaluation(grid, n_empty):
 
   score = 0
 
-  # grid sum
+	# 1. Big 
+	# 1. 次の行動で大きな数字を作ることができるか。  
+	# grid sum
   big_t = np.sum(np.power(grid, 2))
 
-  # smoothness
+  # 4. smoothness
+	# 周囲のタイルが同じような数であればあるほど良い → 合体できるから。
+	# 0 であるほど良い。
   smoothness = 0
   s_grid = np.sqrt(grid)
 
@@ -70,7 +79,9 @@ def evaluation(grid, n_empty):
   smoothness -= np.sum(np.abs(s_grid[1, :] - s_grid[2, :]))
   smoothness -= np.sum(np.abs(s_grid[2, :] - s_grid[3, :]))
 
-  # monotonicity
+  # 3. monotonicity
+	# 大きなタイルが隅に行き、順番に小さなタイルが埋まっていくのが良い。
+	# なぜなら、引っかかるタイルが少なくなるから。
   monotonic_up = 0
   monotonic_down = 0
   monotonic_left = 0
@@ -110,13 +121,18 @@ def evaluation(grid, n_empty):
       current = next
       next += 1
 
+	# (上、下)が同じように単調になることができず、
+	# (左、右)が同じように単調になることができないので、それぞれの場合の最大値を計算。
   monotonic = max(monotonic_up, monotonic_down) + max(monotonic_left, monotonic_right)
   
   # weight for each score
+	# 重み付け計算
   empty_w = 100000
   smoothness_w = 3
   monotonic_w = 10000
 
+	# 2. Emptiness
+	# 次の行動でどれだけ多くの空欄を作ることができるか？
   empty_u = n_empty * empty_w
   smooth_u = smoothness ** smoothness_w
   monotonic_u = monotonic * monotonic_w
@@ -128,28 +144,32 @@ def evaluation(grid, n_empty):
 
   return score
 
-def maximize(grid, depth=0):
+# 再帰関数
+def maximize(grid, depth = 0):
   best_score = -np.inf
   best_action = None
 
+	# 上、下、左、右
   for action in range(4):
     moved_grid = deepcopy(grid)
-    moved_grid, moved, _ = move(moved_grid, action=action)
+    moved_grid, moved, _ = move(moved_grid, action = action)
 
     if not moved:
       continue
 
-    new_score = add_new_tiles(moved_grid, depth+1)
+		# 新しいタイルを追加して、スコア計算
+    new_score = add_new_tiles(moved_grid, depth + 1)
     if new_score >= best_score:
       best_score = new_score
       best_action = action
 
   return best_action, best_score
 
-def add_new_tiles(grid, depth=0):
+def add_new_tiles(grid, depth = 0):
   fcs = free_cells(grid)
   n_empty = len(fcs)
 
+	# テストを行い、最小限の検討回数を考え
   # early stopping
   if n_empty >= 6 and depth >= 3:
     return evaluation(grid, n_empty)
@@ -158,17 +178,18 @@ def add_new_tiles(grid, depth=0):
     return evaluation(grid, n_empty)
 
   if n_empty == 0:
-    _, new_score = maximize(grid, depth+1)
+    _, new_score = maximize(grid, depth + 1)
     return new_score
 
   sum_score = 0
 
+	# 空欄の位置に2もしくは4を入れて計算してみる(確率)
   for x, y in fcs:
     for v in [2, 4]:
       new_grid = deepcopy(grid)
       new_grid[y][x] = v
 
-      _, new_score = maximize(new_grid, depth+1)
+      _, new_score = maximize(new_grid, depth + 1)
 
       if v == 2:
         new_score *= (0.9 / n_empty)
@@ -179,13 +200,13 @@ def add_new_tiles(grid, depth=0):
 
   return sum_score
 
-def run_game(game_class=Game2048, title='2048!', data_dir='save'):
+def run_game(game_class = Game2048, title = '2048!', data_dir = 'save'):
   pygame.init()
   pygame.display.set_caption(title)
   pygame.display.set_icon(game_class.icon(32))
   clock = pygame.time.Clock()
 
-  os.makedirs(data_dir, exist_ok=True)
+  os.makedirs(data_dir, exist_ok = True)
 
   screen = pygame.display.set_mode((game_class.WIDTH, game_class.HEIGHT))
   # screen = pygame.display.set_mode((50, 20))
@@ -197,6 +218,7 @@ def run_game(game_class=Game2048, title='2048!', data_dir='save'):
   manager.game.ANIMATION_FRAMES = 1
   manager.game.WIN_TILE = 999999
 
+  # ゲームループ
   # game loop
   tick = 0
   running = True
@@ -217,7 +239,7 @@ def run_game(game_class=Game2048, title='2048!', data_dir='save'):
       print(best_action)
       e = EVENTS[best_action]
       manager.dispatch(e)
-      pprint(manager.game.grid, width=30)
+      pprint(manager.game.grid, width = 30)
       print(manager.game.score)
 
     for event in pygame.event.get():
